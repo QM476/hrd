@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3×3图片华容道</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      touch-action: manipulation;
+    }
+    body {
+      font-family: "Microsoft YaHei", sans-serif;
+      margin: 0;
+      padding: 10px;
+      background: #f5f2e1;
+      color: #333;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    .container {
+      max-width: 320px;
+      width: 100%;
+    }
+    h1 {
+      color: #8b4513;
+      margin: 10px 0 20px;
+    }
+    .game-board {
+      width: 100%;
+      aspect-ratio: 1/1;
+      background: #d4a76a;
+      border: 4px solid #8b4513;
+      border-radius: 5px;
+      position: relative;
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+      overflow: hidden;
+      margin: 0 auto;
+    }
+    .tile {
+      position: absolute;
+      border: 1px solid #fff;
+      cursor: pointer;
+      transition: all 0.3s;
+      background-size: 300% 300%;
+    }
+    .empty {
+      background: #eee;
+      border: 1px dashed #999;
+    }
+    .controls {
+      margin: 20px 0;
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+    }
+    button {
+      background: #8b4513;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      border-radius: 5px;
+      font-size: 16px;
+      cursor: pointer;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    }
+    button:active {
+      transform: translateY(1px);
+    }
+    .stats {
+      display: flex;
+      justify-content: space-around;
+      margin: 15px 0;
+      font-size: 16px;
+    }
+    .qr-container {
+      margin: 20px auto;
+      padding: 10px;
+      background: white;
+      border-radius: 5px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+    .win-message {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: white;
+      font-size: 24px;
+      z-index: 100;
+      border-radius: 5px;
+    }
+    .win-message button {
+      margin-top: 20px;
+      background: #ffd700;
+      color: #8b4513;
+      font-weight: bold;
+    }
+    #original-image {
+      display: none;
+      width: 300px;
+      height: auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>3×3图片华容道</h1>
+
+    <div class="stats">
+      <div>步数: <span id="steps">0</span></div>
+      <div>时间: <span id="time">0</span>秒</div>
+    </div>
+
+    <div class="game-board" id="game-board">
+      <div class="win-message" id="win-message">
+        <div>恭喜通关!</div>
+        <div id="win-stats"></div>
+        <button id="play-again-btn">再玩一次</button>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button id="restart-btn">重新开始</button>
+      <button id="change-image-btn">换一张图片</button>
+    </div>
+
+    <div class="qr-container">
+      <p>扫码在手机上玩</p>
+      <canvas id="qrcode"></canvas>
+    </div>
+
+    <img id="original-image" crossorigin="anonymous" />
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+  <script>
+    const imageUrls = [
+      "puzzle1.jpg", "puzzle2.jpg", "puzzle3.jpg",
+      "puzzle4.jpg", "puzzle5.jpg", "puzzle6.jpg",
+      "puzzle7.jpg", "puzzle8.jpg"
+    ];
+
+    const config = { size: 3, tileSize: 0 };
+    const state = {
+      board: [],
+      emptyPos: { row: 2, col: 2 },
+      steps: 0,
+      seconds: 0,
+      timer: null,
+      isSolved: false,
+      currentImage: null,
+    };
+
+    const el = {
+      board: document.getElementById("game-board"),
+      steps: document.getElementById("steps"),
+      time: document.getElementById("time"),
+      winMsg: document.getElementById("win-message"),
+      winStats: document.getElementById("win-stats"),
+      restart: document.getElementById("restart-btn"),
+      again: document.getElementById("play-again-btn"),
+      change: document.getElementById("change-image-btn"),
+      original: document.getElementById("original-image"),
+      qrcode: document.getElementById("qrcode"),
+    };
+
+    function initGame() {
+      clearInterval(state.timer);
+      state.steps = 0;
+      state.seconds = 0;
+      state.isSolved = false;
+      el.steps.textContent = "0";
+      el.time.textContent = "0";
+      el.winMsg.style.display = "none";
+      const url = imageUrls[Math.floor(Math.random() * imageUrls.length)];
+      loadImageAndInit(url);
+    }
+
+    function loadImageAndInit(url) {
+      state.currentImage = url;
+      el.original.src = url;
+      el.original.onload = () => {
+        const boardSize = el.board.offsetWidth;
+        config.tileSize = boardSize / config.size;
+        let nums = [1, 2, 3, 4, 5, 6, 7, 8, 0];
+        do {
+          nums = shuffle(nums);
+        } while (!isSolvable(nums));
+        for (let i = 0; i < config.size; i++) {
+          state.board[i] = nums.slice(i * config.size, (i + 1) * config.size);
+          const col = state.board[i].indexOf(0);
+          if (col !== -1) state.emptyPos = { row: i, col };
+        }
+        renderBoard();
+        state.timer = setInterval(() => {
+          state.seconds++;
+          el.time.textContent = state.seconds;
+        }, 1000);
+        generateQRCode();
+      };
+    }
+
+    function renderBoard() {
+      el.board.innerHTML = "";
+      const canvas = document.createElement("canvas");
+      canvas.width = el.original.naturalWidth;
+      canvas.height = el.original.naturalHeight;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(el.original, 0, 0);
+
+      for (let r = 0; r < config.size; r++) {
+        for (let c = 0; c < config.size; c++) {
+          const val = state.board[r][c];
+          const tile = document.createElement("div");
+          tile.className = val === 0 ? "tile empty" : "tile";
+          tile.style.width = tile.style.height = `${config.tileSize}px`;
+          tile.style.left = `${c * config.tileSize}px`;
+          tile.style.top = `${r * config.tileSize}px`;
+
+          if (val !== 0) {
+            const tileCanvas = document.createElement("canvas");
+            tileCanvas.width = config.tileSize;
+            tileCanvas.height = config.tileSize;
+            const tctx = tileCanvas.getContext("2d");
+            tctx.drawImage(
+              canvas,
+              (val - 1) % 3 * el.original.naturalWidth / 3,
+              Math.floor((val - 1) / 3) * el.original.naturalHeight / 3,
+              el.original.naturalWidth / 3,
+              el.original.naturalHeight / 3,
+              0,
+              0,
+              config.tileSize,
+              config.tileSize
+            );
+            tile.style.backgroundImage = `url(${tileCanvas.toDataURL()})`;
+            tile.style.backgroundSize = '100% 100%'; // 保证背景不失真
+            tile.dataset.row = r;
+            tile.dataset.col = c;
+            tile.addEventListener("click", handleTileClick);
+          }
+
+          el.board.appendChild(tile);
+        }
+      }
+
+      el.board.appendChild(el.winMsg);
+    }
+
+    function handleTileClick(e) {
+      if (state.isSolved) return;
+      const row = +e.target.dataset.row;
+      const col = +e.target.dataset.col;
+      if (isAdjacent(state.emptyPos, { row, col })) {
+        state.board[state.emptyPos.row][state.emptyPos.col] = state.board[row][col];
+        state.board[row][col] = 0;
+        state.emptyPos = { row, col };
+        state.steps++;
+        el.steps.textContent = state.steps;
+        renderBoard();
+        if (isSolved()) {
+          clearInterval(state.timer);
+          el.winStats.textContent = `步数: ${state.steps} 时间: ${state.seconds}秒`;
+          el.winMsg.style.display = "flex";
+          state.isSolved = true;
+        }
+      }
+    }
+
+    function isAdjacent(a, b) {
+      return (
+        (Math.abs(a.row - b.row) === 1 && a.col === b.col) ||
+        (Math.abs(a.col - b.col) === 1 && a.row === b.row)
+      );
+    }
+
+    function isSolved() {
+      for (let i = 0; i < 9; i++) {
+        const r = Math.floor(i / 3);
+        const c = i % 3;
+        const val = state.board[r][c];
+        if (i < 8 && val !== i + 1) return false;
+        if (i === 8 && val !== 0) return false;
+      }
+      return true;
+    }
+
+    function shuffle(arr) {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    }
+
+    function isSolvable(arr) {
+      let inv = 0;
+      for (let i = 0; i < arr.length; i++) {
+        for (let j = i + 1; j < arr.length; j++) {
+          if (arr[i] && arr[j] && arr[i] > arr[j]) inv++;
+        }
+      }
+      return inv % 2 === 0;
+    }
+
+    function generateQRCode() {
+      const url = window.location.href;
+      QRCode.toCanvas(el.qrcode, url, { width: 100 });
+    }
+
+    el.restart.addEventListener("click", initGame);
+    el.again.addEventListener("click", initGame);
+    el.change.addEventListener("click", () => loadImageAndInit(imageUrls[Math.floor(Math.random() * imageUrls.length)]));
+    initGame();
+  </script>
+</body>
+</html>
